@@ -7,6 +7,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 EXPECTED_SKILL_SCRIPTS="${PROJECT_ROOT}/.agents/skills/minight-terminal-mcp/scripts"
 SERVER_DIR="${SKILL_DIR}/server"
 DEFAULT_BINARY="${PROJECT_ROOT}/.minight-terminal/bin/minight-terminal"
+DEFAULT_BINARY_EXE="${PROJECT_ROOT}/.minight-terminal/bin/minight-terminal.exe"
 LEGACY_BINARY="${PROJECT_ROOT}/minight-terminal"
 MCP_CONFIG="${PROJECT_ROOT}/.cursor/mcp.json"
 
@@ -29,6 +30,22 @@ fail_line() {
   fail=$((fail + 1))
 }
 
+resolve_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    echo "python"
+    return 0
+  fi
+  if command -v py >/dev/null 2>&1; then
+    echo "py -3"
+    return 0
+  fi
+  return 1
+}
+
 echo "Minight Terminal MCP verification"
 echo "Project root: ${PROJECT_ROOT}"
 echo
@@ -44,12 +61,19 @@ else
   fail_line "Bundled server source missing: ${SERVER_DIR}/go.mod"
 fi
 
-if [[ -x "${DEFAULT_BINARY}" ]]; then
-  pass_line "Project binary exists: ${DEFAULT_BINARY}"
+if [[ -x "${DEFAULT_BINARY_EXE}" ]]; then
+  pass_line "Project binary exists: ${DEFAULT_BINARY_EXE}"
+elif [[ -x "${DEFAULT_BINARY}" ]]; then
+  if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* || -n "${MSYSTEM:-}" ]]; then
+    warn_line "Binary missing .exe suffix on Windows: ${DEFAULT_BINARY}"
+    warn_line "Re-run install-project-mcp.sh to build minight-terminal.exe"
+  else
+    pass_line "Project binary exists: ${DEFAULT_BINARY}"
+  fi
 elif [[ -x "${LEGACY_BINARY}" ]]; then
   warn_line "Legacy repo-root binary exists: ${LEGACY_BINARY}"
 else
-  fail_line "Binary missing: ${DEFAULT_BINARY} (run install-project-mcp.sh)"
+  fail_line "Binary missing: ${DEFAULT_BINARY_EXE} (run install-project-mcp.sh)"
 fi
 
 if [[ -f "${MCP_CONFIG}" ]]; then
@@ -58,43 +82,72 @@ else
   fail_line "Project MCP config missing: ${MCP_CONFIG}"
 fi
 
-if [[ -f "${MCP_CONFIG}" ]]; then
+PYTHON_BIN="$(resolve_python || true)"
+if [[ -f "${MCP_CONFIG}" && -n "${PYTHON_BIN}" ]]; then
   read -r line < <(
-    python3 - <<'PY' "${MCP_CONFIG}" "${DEFAULT_BINARY}" "${LEGACY_BINARY}"
+    ${PYTHON_BIN} - <<'PY' "${MCP_CONFIG}" "${DEFAULT_BINARY}" "${DEFAULT_BINARY_EXE}" "${LEGACY_BINARY}"
 import json
 import sys
 
-config_path, default_binary, legacy_binary = sys.argv[1:4]
+config_path, default_binary, default_binary_exe, legacy_binary = sys.argv[1:5]
 with open(config_path, "r", encoding="utf-8") as f:
     data = json.load(f)
 
 entry = data.get("mcpServers", {}).get("minight-terminal")
 if not entry:
-    print("missing|no|no")
+    print("missing|no|no|no|no")
     raise SystemExit(0)
 
 command = entry.get("command", "")
-if command == default_binary:
+env = entry.get("env", {}) or {}
+backend = env.get("MINIGHT_BACKEND", "")
+shell = env.get("MINIGHT_SHELL", "")
+
+if command == default_binary_exe:
+    status = "default_exe"
+elif command == default_binary:
     status = "default"
 elif command == legacy_binary:
     status = "legacy"
 else:
     status = "other"
-print(f"{command}|{status}|yes")
+
+print(f"{command}|{status}|yes|{backend}|{shell}")
 PY
   )
-  IFS='|' read -r command_path match_status has_entry <<< "${line}"
+  IFS='|' read -r command_path match_status has_entry backend shell <<< "${line}"
 
   if [[ "${has_entry}" != "yes" ]]; then
     fail_line "MCP config has no minight-terminal entry"
-  elif [[ "${match_status}" == "default" ]]; then
+  elif [[ "${match_status}" == "default_exe" ]]; then
     pass_line "MCP command path matches project binary: ${command_path}"
+  elif [[ "${match_status}" == "default" ]]; then
+    if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* || -n "${MSYSTEM:-}" ]]; then
+      warn_line "MCP config uses non-.exe binary path on Windows (${command_path})"
+    else
+      pass_line "MCP command path matches project binary: ${command_path}"
+    fi
   elif [[ "${match_status}" == "legacy" ]]; then
     warn_line "MCP config uses legacy repo-root binary path (${command_path})"
     warn_line "Re-run install-project-mcp.sh to migrate to .minight-terminal/bin/"
   else
     warn_line "MCP command path differs from expected project binary (${command_path})"
   fi
+
+  if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* || -n "${MSYSTEM:-}" ]]; then
+    if [[ -z "${backend}" ]]; then
+      warn_line "MCP env missing MINIGHT_BACKEND (recommended: posix on Git Bash)"
+    elif [[ "${backend}" == "posix" ]]; then
+      pass_line "MCP env MINIGHT_BACKEND=posix"
+    fi
+    if [[ -z "${shell}" ]]; then
+      warn_line "MCP env missing MINIGHT_SHELL (Cursor may inherit invalid SHELL=/bin/sh)"
+    else
+      pass_line "MCP env MINIGHT_SHELL is set"
+    fi
+  fi
+elif [[ -f "${MCP_CONFIG}" ]]; then
+  warn_line "Python not found; skipping MCP config content checks"
 fi
 
 if command -v go >/dev/null 2>&1; then

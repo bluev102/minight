@@ -64,7 +64,30 @@ You can also point Cursor at the built binary inside this repo after `go build`.
 
 ## Windows Setup
 
-### Native Windows (recommended for repos on `E:\`, `C:\`, etc.)
+### Git Bash on Windows (recommended for Cursor on Windows)
+
+For repos on `E:\`, `C:\`, etc., use Git Bash as the POSIX backend. The installer sets this automatically when run from Git Bash:
+
+```json
+{
+  "mcpServers": {
+    "minight-terminal": {
+      "type": "stdio",
+      "command": "<project>/.minight-terminal/bin/minight-terminal.exe",
+      "args": [],
+      "env": {
+        "MAX_TIMEOUT_SECONDS": "300",
+        "MINIGHT_BACKEND": "posix",
+        "MINIGHT_SHELL": "C:/Program Files/Git/bin/bash.exe"
+      }
+    }
+  }
+}
+```
+
+Session `cwd` accepts both `E:/work2026/...` and Git Bash `/e/work2026/...`. Persisted cwd/env apply on every subsequent `run_command` with the same `session_id`.
+
+### Native Windows PowerShell backend
 
 Build on Windows and register the binary directly:
 
@@ -83,7 +106,7 @@ Build on Windows and register the binary directly:
 }
 ```
 
-Native Windows backend uses PowerShell, avoids WSL `/mnt/<drive>` filesystem penalties, and accepts Windows paths directly.
+Native Windows backend uses PowerShell for cmdlets and Windows paths directly. Pure PowerShell commands (for example `Write-Output ping`) are supported.
 
 ### WSL bridge (legacy)
 
@@ -117,7 +140,7 @@ Input:
 - `return_code` is the shell exit code of the full command string.
 - `had_failure` is true when any command segment failed or exit code was non-zero.
 - Use `fail_on_any_error: true` (bash) to detect earlier failures in `;` chains while keeping shell-final `return_code`.
-- Use `pipefail: true` (bash) so pipeline failures propagate.
+- Use `pipefail: true` (bash) so pipeline failures propagate into `return_code`, and earlier command failures in `;` chains set `had_failure`.
 
 Compact response:
 
@@ -186,7 +209,7 @@ Response:
 - Each command runs in a short-lived shell via the selected backend (`posix` or `windows`).
 - After each command, the server captures final `cwd` and environment via an internal trailer and updates the session, including after non-zero exits.
 - `current_cwd` always reflects the shell-reported cwd from the trailer; `cwd_persisted` confirms session storage matched.
-- On timeout, the process group is killed and session state is not updated.
+- On timeout, the process group is killed, session state is not updated, and internal trailer/env capture is stripped from user-visible output.
 - Output is ANSI-stripped, CRLF-normalized (by default), and truncated using head/tail retention when it exceeds the configured limit.
 - Dangerous commands are rejected before execution with a short JSON error.
 - Background jobs started with `&` are tracked when detectable; `kill_session` with `terminate_background_jobs: true` kills tracked PIDs.

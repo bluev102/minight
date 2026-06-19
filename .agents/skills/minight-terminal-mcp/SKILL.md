@@ -4,7 +4,7 @@ description: Install, verify, and use the minight-terminal MCP server for sessio
 license: MIT
 compatibility: Requires Cursor MCP, Go 1.23+, local host shell access, and stdio MCP transport.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bluev102/minight
 ---
 
@@ -42,7 +42,9 @@ metadata:
 
 ## Windows Notes
 
-- **Native Windows backend** (`MINIGHT_BACKEND=windows`): run `minight-terminal.exe` directly for repos on `C:\`, `E:\`, etc.
+- **Git Bash on Windows (recommended)**: set `MINIGHT_BACKEND=posix` and `MINIGHT_SHELL` to Git Bash (`C:/Program Files/Git/bin/bash.exe`). The installer sets these when run from Git Bash.
+- **Native Windows backend** (`MINIGHT_BACKEND=windows`): run `minight-terminal.exe` with PowerShell for native cmdlets and Windows paths.
+- **cwd formats on Windows**: both `E:/work2026/...` and Git Bash `/e/work2026/...` are accepted; session cwd persists across calls.
 - **WSL bridge**: use `/mnt/e/...` paths; shorthand `/e/...` is auto-normalized when enabled.
 - Check `environment_warnings` in verbose output for drvfs slow-mount hints.
 
@@ -58,10 +60,10 @@ metadata:
 
 - Required for `run_command`: `command`
 - Optional: `session_id` (default `default`), `timeout` (seconds), `cwd`, `verbose`, `fail_on_any_error`, `pipefail`, `strip_crlf`
-- `return_code` follows shell rules for the full command string; use `had_failure` for earlier failures
+- `return_code` follows shell rules for the full command string; use `had_failure` for earlier failures (including with `pipefail: true` on semicolon chains)
 - Use `verbose: true` when debugging timing, truncation, env changes, or WSL warnings
 - Do not expect env values in responses; only cwd and `env_key_count` are exposed
-- On timeout, session state is not updated
+- On timeout, session state is not updated and trailer/env dump is stripped from output
 - Treat safety guardrails as best-effort, not a sandbox
 
 ## Common Patterns

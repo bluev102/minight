@@ -100,17 +100,22 @@ Response:
 - Each command runs in a short-lived shell via `posix` or `windows` backend
 - After each command, server captures final cwd/env via internal trailer with explicit `__MINIGHT_CWD=` marker
 - Session updates even on non-zero exit codes
-- On timeout, process group is killed and session state is not updated
+- On timeout, process group is killed, session state is not updated, and partial trailer/env output is stripped from user-visible stdout/stderr
 
 ## Windows Guidance
 
 | Setup | When to use |
 |-------|-------------|
-| `MINIGHT_BACKEND=windows` (native `.exe`) | Windows repos on local drives; fastest git/filesystem |
+| `MINIGHT_BACKEND=posix` + Git Bash (`MINIGHT_SHELL`) | Recommended on Windows Cursor; fast git, `/e/...` paths, session cwd/env persistence |
+| `MINIGHT_BACKEND=windows` (native `.exe` + PowerShell) | Native cmdlets, Windows paths, PowerShell-only workflows |
 | WSL bridge via `wsl.exe` | Linux toolchain required; accept `/mnt/<drive>/` paths |
 | Built-in Cursor terminal | Interactive, aliases, long logs, heavy Windows PATH |
 
 Under WSL, `/e/...` paths are auto-normalized to `/mnt/e/...` when `MINIGHT_NORMALIZE_WSL_PATHS=true`.
+
+On native Windows with Git Bash, `/e/...` cwd values are normalized to `E:/...` for process spawn while session metadata keeps shell-visible paths from `pwd`.
+
+`pipefail: true` propagates pipeline failures into `return_code` and also sets `had_failure` for earlier failures in `;` chains (bash).
 
 ## Output Processing
 

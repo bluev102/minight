@@ -47,7 +47,8 @@ Before using any MCP tool, read its tool descriptor/schema first.
 The install script builds:
 
 ```text
-.minight-terminal/bin/minight-terminal
+.minight-terminal/bin/minight-terminal.exe   # Windows
+.minight-terminal/bin/minight-terminal       # Linux/macOS
 ```
 
 and registers it in:

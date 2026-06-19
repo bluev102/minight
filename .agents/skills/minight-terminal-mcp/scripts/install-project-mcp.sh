@@ -7,7 +7,6 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 EXPECTED_SKILL_SCRIPTS="${PROJECT_ROOT}/.agents/skills/minight-terminal-mcp/scripts"
 SERVER_DIR="${SKILL_DIR}/server"
 BIN_DIR="${PROJECT_ROOT}/.minight-terminal/bin"
-BINARY="${BIN_DIR}/minight-terminal"
 MCP_CONFIG="${PROJECT_ROOT}/.cursor/mcp.json"
 MCP_DIR="${PROJECT_ROOT}/.cursor"
 
@@ -39,6 +38,36 @@ resolve_go() {
   return 1
 }
 
+resolve_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    echo "python"
+    return 0
+  fi
+  if command -v py >/dev/null 2>&1; then
+    echo "py -3"
+    return 0
+  fi
+  return 1
+}
+
+detect_git_bash() {
+  if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* || -n "${MSYSTEM:-}" ]]; then
+    if [[ -x "/c/Program Files/Git/bin/bash.exe" ]]; then
+      echo "C:/Program Files/Git/bin/bash.exe"
+      return 0
+    fi
+    if [[ -n "${BASH:-}" && "${BASH}" == *Git* ]]; then
+      cygpath -w "${BASH}" 2>/dev/null || true
+      return 0
+    fi
+  fi
+  return 1
+}
+
 echo "Installing minight-terminal MCP config for project"
 echo "Project root: ${PROJECT_ROOT}"
 echo "Server source: ${SERVER_DIR}"
@@ -49,7 +78,17 @@ if [[ -z "${GO_BIN}" ]]; then
   exit 1
 fi
 
+PYTHON_BIN="$(resolve_python || true)"
+if [[ -z "${PYTHON_BIN}" ]]; then
+  echo "ERROR: Python not found. Install Python 3 or ensure python3/python/py is on PATH." >&2
+  exit 1
+fi
+
+GOEXE="$("${GO_BIN}" env GOEXE 2>/dev/null || true)"
+BINARY="${BIN_DIR}/minight-terminal${GOEXE}"
+
 echo "Using Go: ${GO_BIN}"
+echo "Using Python: ${PYTHON_BIN}"
 mkdir -p "${BIN_DIR}"
 (
   cd "${SERVER_DIR}"
@@ -61,12 +100,21 @@ echo "Built binary: ${BINARY}"
 
 mkdir -p "${MCP_DIR}"
 
-python3 - <<'PY' "${MCP_CONFIG}" "${BINARY}"
+MCP_BACKEND=""
+MCP_SHELL=""
+if git_bash="$(detect_git_bash || true)"; then
+  MCP_BACKEND="posix"
+  MCP_SHELL="${git_bash}"
+  echo "Detected Git Bash on Windows; setting MINIGHT_BACKEND=posix and MINIGHT_SHELL"
+fi
+
+export MCP_BACKEND MCP_SHELL
+${PYTHON_BIN} - <<'PY' "${MCP_CONFIG}" "${BINARY}" "${MCP_BACKEND}" "${MCP_SHELL}"
 import json
 import os
 import sys
 
-config_path, binary_path = sys.argv[1:3]
+config_path, binary_path, backend, shell = sys.argv[1:5]
 data = {"mcpServers": {}}
 
 if os.path.exists(config_path):
@@ -76,13 +124,17 @@ if os.path.exists(config_path):
         data = loaded
 
 servers = data.setdefault("mcpServers", {})
+env = {"MAX_TIMEOUT_SECONDS": "300"}
+if backend:
+    env["MINIGHT_BACKEND"] = backend
+if shell:
+    env["MINIGHT_SHELL"] = shell
+
 servers["minight-terminal"] = {
     "type": "stdio",
     "command": binary_path,
     "args": [],
-    "env": {
-        "MAX_TIMEOUT_SECONDS": "300",
-    },
+    "env": env,
 }
 
 with open(config_path, "w", encoding="utf-8") as f:

@@ -77,16 +77,12 @@ func (r *Runner) Run(ctx context.Context, req Request) Response {
 	if req.CWD != "" {
 		cwd = req.CWD
 	}
-	if r.cfg.NormalizeWSLPaths {
-		if normalized, _ := pathutil.NormalizeWSLPath(cwd); normalized != cwd {
-			cwd = normalized
-		}
-	}
-	if !dirExists(cwd) {
+	execCWD := pathutil.HostCWDForExec(cwd, r.cfg.NormalizeWSLPaths)
+	if !dirExists(execCWD) {
 		return Response{
 			ReturnCode: 1,
 			CurrentCWD: state.CWD,
-			Error:      fmt.Sprintf("invalid cwd: %s", cwd),
+			Error:      fmt.Sprintf("invalid cwd: %s", execCWD),
 		}
 	}
 
@@ -104,11 +100,11 @@ func (r *Runner) Run(ctx context.Context, req Request) Response {
 	}
 	sanitizeOpts := output.SanitizeOpts{Limit: r.cfg.OutputLimit, StripCRLF: stripCRLF}
 
-	warnings := environmentWarnings(cwd)
+	warnings := environmentWarnings(execCWD)
 
 	result := r.backend.Execute(ctx, backend.ExecuteOpts{
 		Command:        req.Command,
-		CWD:            cwd,
+		CWD:            execCWD,
 		Env:            state.Env,
 		Timeout:        timeout,
 		FailOnAnyError: req.FailOnAnyError,

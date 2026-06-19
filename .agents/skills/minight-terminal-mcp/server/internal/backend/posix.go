@@ -72,8 +72,8 @@ func (b *POSIXBackend) Execute(ctx context.Context, opts ExecuteOpts) ExecResult
 	timedOut := cmdCtx.Err() == context.DeadlineExceeded
 	if timedOut {
 		return ExecResult{
-			Stdout:   stdoutBuf.String(),
-			Stderr:   stderrBuf.String() + "\ncommand timed out",
+			Stdout:   stripPartialTrailer(stdoutBuf.String()),
+			Stderr:   stripPartialTrailer(stderrBuf.String()) + "\ncommand timed out",
 			ExitCode: 124,
 			TimedOut: true,
 		}
@@ -117,8 +117,9 @@ func (b *POSIXBackend) Execute(ctx context.Context, opts ExecuteOpts) ExecResult
 
 func wrapPOSIXCommand(command, shell string, failOnAnyError, pipefail bool) string {
 	prefix := ""
+	trackFailures := failOnAnyError || pipefail
 	if strings.Contains(shell, "bash") {
-		if failOnAnyError {
+		if trackFailures {
 			prefix += "__minight_any_fail=0\n" +
 				"trap '__minight_any_fail=1' ERR\n" +
 				"set +e\n"
@@ -129,12 +130,12 @@ func wrapPOSIXCommand(command, shell string, failOnAnyError, pipefail bool) stri
 	}
 
 	suffix := ""
-	if failOnAnyError && strings.Contains(shell, "bash") {
+	if trackFailures && strings.Contains(shell, "bash") {
 		suffix = "trap - ERR\n"
 	}
 
 	anyFailLine := "__minight_any_fail=0\n[ $__minight_rc -ne 0 ] && __minight_any_fail=1\n"
-	if failOnAnyError && strings.Contains(shell, "bash") {
+	if trackFailures && strings.Contains(shell, "bash") {
 		anyFailLine = ""
 	}
 

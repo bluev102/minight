@@ -55,8 +55,8 @@ func (b *WindowsBackend) Execute(ctx context.Context, opts ExecuteOpts) ExecResu
 	timedOut := cmdCtx.Err() == context.DeadlineExceeded
 	if timedOut {
 		return ExecResult{
-			Stdout:   stdoutBuf.String(),
-			Stderr:   stderrBuf.String() + "\ncommand timed out",
+			Stdout:   stripPartialTrailer(stdoutBuf.String()),
+			Stderr:   stripPartialTrailer(stderrBuf.String()) + "\ncommand timed out",
 			ExitCode: 124,
 			TimedOut: true,
 		}
@@ -115,7 +115,7 @@ func wrapWindowsCommand(command string, failOnAnyError bool) string {
 
 	return fmt.Sprintf(`$ErrorActionPreference = 'Continue'
 %s
-$__minight_rc = $LASTEXITCODE
+if ($null -eq $LASTEXITCODE) { $__minight_rc = 0 } else { $__minight_rc = [int]$LASTEXITCODE }
 %s
 $__minight_bg = @()
 Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" -ErrorAction SilentlyContinue | ForEach-Object { $__minight_bg += $_.ProcessId }

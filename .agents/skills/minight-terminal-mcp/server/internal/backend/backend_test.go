@@ -59,3 +59,43 @@ func TestWrapPOSIXCommandIncludesExplicitCWD(t *testing.T) {
 		}
 	}
 }
+
+func TestWrapPOSIXCommandPipefailEnablesERRTrap(t *testing.T) {
+	wrapped := wrapPOSIXCommand("grep x missing; echo done", "/bin/bash", false, true)
+	if !strings.Contains(wrapped, "trap '__minight_any_fail=1' ERR") {
+		t.Fatalf("expected ERR trap with pipefail: %s", wrapped)
+	}
+}
+
+func TestStripPartialTrailer(t *testing.T) {
+	raw := "user output\n" + trailerBegin + "\n__MINIGHT_RC=0\n" + envBegin + "\nFOO=bar\x00"
+	got := stripPartialTrailer(raw)
+	if strings.Contains(got, trailerBegin) || strings.Contains(got, envBegin) {
+		t.Fatalf("stripPartialTrailer() = %q", got)
+	}
+	if strings.TrimSpace(got) != "user output" {
+		t.Fatalf("stripPartialTrailer() = %q", got)
+	}
+}
+
+func TestWrapWindowsCommandDefaultsNullExitCode(t *testing.T) {
+	wrapped := wrapWindowsCommand("Write-Output ping", false)
+	if !strings.Contains(wrapped, "if ($null -eq $LASTEXITCODE) { $__minight_rc = 0 }") {
+		t.Fatalf("wrapped command missing null LASTEXITCODE guard: %s", wrapped)
+	}
+	if !strings.Contains(wrapped, "__MINIGHT_RC=") {
+		t.Fatalf("wrapped command missing __MINIGHT_RC trailer line: %s", wrapped)
+	}
+}
+
+func TestParseTrailerBlockWindowsNullRC(t *testing.T) {
+	block := trailerBegin + "\n__MINIGHT_RC=0\n__MINIGHT_CWD=C:\\Users\\test\n__MINIGHT_ANY_FAIL=0\n__MINIGHT_BG=\n" +
+		envBegin + "\n" + envEnd + "\n" + trailerEnd
+	data, err := parseTrailerBlock(block)
+	if err != nil {
+		t.Fatalf("parseTrailerBlock() error = %v", err)
+	}
+	if data.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", data.ExitCode)
+	}
+}
