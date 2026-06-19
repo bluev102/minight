@@ -16,6 +16,24 @@ Then reload MCP in Cursor.
 After installs accumulate, the skill may appear at:
 `https://skills.sh/bluev102/minight/minight-terminal-mcp`
 
+## Recommended Cursor Rule
+
+Enabling the MCP server makes the tools available to Cursor, but agents may still
+choose Cursor's built-in terminal for ordinary shell commands. To make usage more
+consistent, add this as a Cursor user rule or project rule:
+
+```md
+When running shell commands, prefer the minight-terminal MCP when the task
+benefits from persistent cwd/env, structured JSON output, explicit timeouts, or
+repeatable command sessions.
+
+Use Cursor's built-in terminal for interactive commands, long-running dev
+servers/watchers, raw log inspection, or commands that depend heavily on the
+user's shell aliases, nvm, or inherited local environment.
+
+Before using any MCP tool, read its tool descriptor/schema first.
+```
+
 ## Quickstart (from source)
 
 Build the binary:
