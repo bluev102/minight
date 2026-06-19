@@ -1,0 +1,31 @@
+---
+description: Use for new features, implementation work, and non-trivial refactors
+globs:
+alwaysApply: false
+---
+
+# Feature implementation workflow
+
+When the task involves building a feature, extending behavior, or performing a non-trivial refactor:
+
+1. Start with planning.
+   - Follow the `writing-plans` skill.
+   - Break the work into small, ordered steps.
+   - Identify risks, dependencies, and unknowns before editing.
+
+2. Prefer test-driven implementation.
+   - Follow the `tdd` skill where practical.
+   - Add or update tests before or alongside production code.
+   - Prefer narrow tests that prove the required behavior.
+
+3. Keep implementation incremental.
+   - Make the smallest useful change first.
+   - Re-run tests after each meaningful step.
+   - Avoid large speculative rewrites.
+
+4. Preserve architecture.
+   - Reuse existing patterns when they are sound.
+   - If the existing structure is weak, finish the requested behavior first, then use `improve-codebase-architecture` for targeted cleanup.
+
+5. Avoid premature cleanup.
+   - Do not rename, move, or reorganize unrelated code unless required for correctness or maintainability of the requested change.

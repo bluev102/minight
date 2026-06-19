@@ -1,0 +1,35 @@
+---
+description: Global engineering workflow for all non-trivial tasks
+globs:
+alwaysApply: true
+---
+
+# General workflow
+
+For any non-trivial task, follow this workflow:
+
+1. Understand the request first.
+   - Restate the goal internally in a precise way.
+   - Identify whether the task is a feature, bugfix, refactor, investigation, or verification-only change.
+
+2. Plan before editing.
+   - For any multi-step task, create a short implementation plan before making code changes.
+   - Prefer small, testable steps instead of large edits.
+
+3. Use the minimum relevant skill for the current phase.
+   - Feature or refactor work: use `writing-plans` and `tdd`.
+   - Bug, regression, flaky behavior, or unclear failure: use `systematic-debugging`.
+   - Structural cleanup after implementation: use `improve-codebase-architecture`.
+   - Before declaring completion: use `verification-before-completion`.
+
+4. Keep changes scoped.
+   - Do not mix unrelated fixes into the same change.
+   - Do not refactor broadly unless it is necessary for the requested task.
+
+5. Prefer evidence over confidence.
+   - Never claim success without verification.
+   - Use tests, lint, build output, or runtime checks as evidence.
+
+6. Keep context clean.
+   - Load only the skills relevant to the current phase.
+   - Avoid unnecessary tool use and avoid expanding scope without a clear reason.

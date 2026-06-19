@@ -1,0 +1,7 @@
+minight-terminal
+.minight-terminal/
+/tools/
+.tools/
+.codegraph/
+*.exe
+*.test

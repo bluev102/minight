@@ -1,0 +1,29 @@
+---
+description: Use for bugs, regressions, flaky tests, unexpected behavior, and legacy-code issues
+globs:
+alwaysApply: false
+---
+
+# Debug and fix workflow
+
+When the task is a bug, regression, flaky test, production issue, or unclear behavior:
+
+1. Do not jump straight to code changes.
+   - First reproduce or characterize the issue.
+   - Gather evidence from logs, tests, stack traces, outputs, and recent changes.
+
+2. Follow root-cause debugging.
+   - Use the `systematic-debugging` skill before changing code for non-trivial issues.
+   - Prefer identifying the real cause instead of patching symptoms.
+
+3. Add protection before fixing.
+   - When possible, add a failing test, characterization test, or reproduction step that proves the bug exists.
+   - After the fix, verify that the test or reproduction now passes.
+
+4. Keep fixes surgical.
+   - Change only what is required to solve the issue.
+   - Avoid opportunistic refactors during debugging unless they are required to make the fix safe.
+
+5. Verify before completion.
+   - Run relevant tests, lint, build, or runtime verification.
+   - Use `verification-before-completion` before claiming the issue is resolved.

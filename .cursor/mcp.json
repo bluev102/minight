@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "/home/hac/workspace/minight"
+      ]
+    },
+    "minight-terminal": {
+      "type": "stdio",
+      "command": "/home/hac/workspace/minight/.minight-terminal/bin/minight-terminal",
+      "args": [],
+      "env": {
+        "MAX_TIMEOUT_SECONDS": "300"
+      }
+    }
+  }
+}
