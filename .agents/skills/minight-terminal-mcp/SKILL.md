@@ -4,7 +4,7 @@ description: Install, verify, and use the minight-terminal MCP server for sessio
 license: MIT
 compatibility: Requires Cursor MCP, Go 1.23+, local host shell access, and stdio MCP transport.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   repository: https://github.com/bluev102/minight
 ---
 
@@ -27,7 +27,7 @@ metadata:
 ## When To Use MCP vs Built-in Terminal
 
 **Prefer `minight-terminal` MCP when:**
-- Commands need structured JSON output (`return_code`, `timed_out`, `truncated`)
+- Commands need structured JSON output (`return_code`, `had_failure`, `timed_out`, `truncated`)
 - Session must persist `cwd` across multiple commands
 - Session must persist env (`export PATH=...` then later commands)
 - Output should be token-friendly (ANSI stripped, head/tail truncation)
@@ -37,22 +37,30 @@ metadata:
 **Prefer built-in terminal when:**
 - Full inherited shell PATH is required immediately (nvm, aliases, local tools)
 - Interactive behavior, full raw output, or long unbounded logs are needed
+- Git/filesystem scans on Windows repos via WSL `/mnt/<drive>/` (native Windows backend or built-in is faster)
 - One-off repo setup outside MCP session context
+
+## Windows Notes
+
+- **Native Windows backend** (`MINIGHT_BACKEND=windows`): run `minight-terminal.exe` directly for repos on `C:\`, `E:\`, etc.
+- **WSL bridge**: use `/mnt/e/...` paths; shorthand `/e/...` is auto-normalized when enabled.
+- Check `environment_warnings` in verbose output for drvfs slow-mount hints.
 
 ## Core Workflow
 
 1. Choose a stable `session_id` (example: `project-build`, `debug-session`).
 2. Optionally set initial `cwd` on first command.
 3. Run commands with `run_command`.
-4. Use `get_session` to inspect current cwd.
-5. Use `kill_session` to reset state when done.
+4. Use `get_session` or `list_sessions` to inspect sessions.
+5. Use `kill_session` with `terminate_background_jobs: true` when cleaning up background work.
 
 ## Tool Usage Rules
 
 - Required for `run_command`: `command`
-- Optional: `session_id` (default `default`), `timeout` (seconds), `cwd`, `verbose`
-- Use `verbose: true` only when debugging timing, truncation, or env changes
-- Do not expect env values in responses; only cwd is exposed via `get_session`
+- Optional: `session_id` (default `default`), `timeout` (seconds), `cwd`, `verbose`, `fail_on_any_error`, `pipefail`, `strip_crlf`
+- `return_code` follows shell rules for the full command string; use `had_failure` for earlier failures
+- Use `verbose: true` when debugging timing, truncation, env changes, or WSL warnings
+- Do not expect env values in responses; only cwd and `env_key_count` are exposed
 - On timeout, session state is not updated
 - Treat safety guardrails as best-effort, not a sandbox
 
@@ -65,29 +73,36 @@ metadata:
 
 **Persist cwd**
 ```json
-{"command":"cd backend && pwd","session_id":"main"}
+{"command":"cd backend && ls","session_id":"main"}
 {"command":"go test ./...","session_id":"main","timeout":120}
 ```
 
-**Persist PATH once per session**
+**Detect pipeline failures**
 ```json
-{"command":"export PATH=/path/to/go/bin:$PATH","session_id":"main"}
-{"command":"go test ./...","session_id":"main","timeout":120}
+{"command":"git status --short | head -5","session_id":"main","pipefail":true}
 ```
 
-**Reset session**
+**Detect semicolon-chain failures**
 ```json
-{"session_id":"main"}
+{"command":"false; echo done","session_id":"main","fail_on_any_error":true}
+```
+
+**Reset session and background jobs**
+```json
+{"session_id":"main","terminate_background_jobs":true}
 ```
 Call `kill_session` with the above args.
 
 ## Response Handling
 
 Parse JSON from tool result text. Key fields:
-- `return_code`: command exit code
+- `return_code`: shell exit code of full command string
+- `had_failure`: any failure in the command chain
+- `cwd_persisted`: session cwd matched shell trailer
 - `timed_out`: true if killed by timeout
 - `truncated`: true if stdout/stderr was shortened
 - `current_cwd`: session cwd after command
+- `environment_warnings`: platform/path performance hints
 - `error`: validation/safety/execution error message
 
 If `truncated` is true and details are missing, rerun with narrower command or `verbose: true`.

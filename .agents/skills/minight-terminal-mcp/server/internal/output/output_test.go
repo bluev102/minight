@@ -13,11 +13,21 @@ func TestStripANSI(t *testing.T) {
 	}
 }
 
+func TestStripCRLF(t *testing.T) {
+	got := StripCRLF("line1\r\nline2\r")
+	if got != "line1\nline2\n" {
+		t.Fatalf("StripCRLF() = %q", got)
+	}
+}
+
 func TestTruncateShortOutputUnchanged(t *testing.T) {
 	input := "hello"
 	got := TruncateHeadTail(input, 100)
 	if got.Text != input || got.Truncated || got.OmittedBytes != 0 {
 		t.Fatalf("unexpected result: %+v", got)
+	}
+	if got.TotalBytes != len(input) {
+		t.Fatalf("TotalBytes = %d, want %d", got.TotalBytes, len(input))
 	}
 }
 
@@ -41,7 +51,7 @@ func TestTruncateHeadTailPreservesEnds(t *testing.T) {
 
 func TestSanitizeStream(t *testing.T) {
 	input := "\x1b[32m" + strings.Repeat("x", 4000) + "\x1b[0m\n"
-	got := SanitizeStream(input, 100)
+	got := SanitizeStream(input, SanitizeOpts{Limit: 100, StripCRLF: true})
 	if strings.Contains(got.Text, "\x1b") {
 		t.Fatal("expected ANSI stripped")
 	}

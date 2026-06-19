@@ -31,13 +31,19 @@ func TestGetAutoCreatesUnknownSession(t *testing.T) {
 
 func TestUpdateCWDAndEnv(t *testing.T) {
 	m := NewManager()
-	updated := m.Update("default", "/tmp", map[string]string{"FOO": "bar"})
+	updated := m.Update("default", "/tmp", map[string]string{"FOO": "bar"}, UpdateMeta{
+		LastCommand: "export FOO=bar",
+		ReturnCode:  0,
+	})
 
 	if updated.CWD != "/tmp" {
 		t.Fatalf("CWD = %q, want /tmp", updated.CWD)
 	}
 	if updated.Env["FOO"] != "bar" {
 		t.Fatalf("Env[FOO] = %q, want bar", updated.Env["FOO"])
+	}
+	if updated.LastCommand != "export FOO=bar" {
+		t.Fatalf("LastCommand = %q", updated.LastCommand)
 	}
 
 	got := m.Get("default")
@@ -50,7 +56,7 @@ func TestKillRemovesSession(t *testing.T) {
 	m := NewManager()
 	home, _ := os.UserHomeDir()
 
-	m.Update("default", "/tmp", map[string]string{"FOO": "bar"})
+	m.Update("default", "/tmp", map[string]string{"FOO": "bar"}, UpdateMeta{})
 	m.Kill("default")
 
 	state := m.Get("default")
@@ -65,11 +71,38 @@ func TestKillRemovesSession(t *testing.T) {
 func TestEnvMapCopyIsolation(t *testing.T) {
 	m := NewManager()
 	env := map[string]string{"FOO": "bar"}
-	m.Update("default", "", env)
+	m.Update("default", "", env, UpdateMeta{})
 	env["FOO"] = "changed"
 
 	got := m.Get("default")
 	if got.Env["FOO"] != "bar" {
 		t.Fatalf("Env[FOO] = %q, want bar", got.Env["FOO"])
+	}
+}
+
+func TestListAndInfo(t *testing.T) {
+	m := NewManager()
+	m.Update("alpha", "/tmp", map[string]string{"A": "1"}, UpdateMeta{LastCommand: "cd /tmp"})
+	m.Update("beta", "/var", nil, UpdateMeta{})
+
+	sessions := m.List()
+	if len(sessions) != 2 {
+		t.Fatalf("List() len = %d, want 2", len(sessions))
+	}
+
+	info := m.Info("alpha")
+	if info.CWD != "/tmp" || info.EnvKeyCount != 1 || info.LastCommand != "cd /tmp" {
+		t.Fatalf("Info() = %+v", info)
+	}
+}
+
+func TestMergeBackgroundPIDs(t *testing.T) {
+	m := NewManager()
+	m.Update("bg", "/tmp", nil, UpdateMeta{BackgroundPIDs: []int{100, 101}})
+	m.Update("bg", "/tmp", nil, UpdateMeta{BackgroundPIDs: []int{101, 102}})
+
+	got := m.Get("bg")
+	if len(got.BackgroundPIDs) != 3 {
+		t.Fatalf("BackgroundPIDs = %v, want 3 unique pids", got.BackgroundPIDs)
 	}
 }

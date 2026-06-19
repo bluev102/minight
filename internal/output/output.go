@@ -11,15 +11,29 @@ type TruncatedOutput struct {
 	Text         string
 	Truncated    bool
 	OmittedBytes int
+	TotalBytes   int
+	ShownBytes   int
+}
+
+type SanitizeOpts struct {
+	Limit     int
+	StripCRLF bool
 }
 
 func StripANSI(s string) string {
 	return ansiPattern.ReplaceAllString(s, "")
 }
 
+func StripCRLF(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
+
 func TruncateHeadTail(s string, limit int) TruncatedOutput {
-	if limit <= 0 || len(s) <= limit {
-		return TruncatedOutput{Text: s}
+	total := len(s)
+	if limit <= 0 || total <= limit {
+		return TruncatedOutput{Text: s, TotalBytes: total, ShownBytes: total}
 	}
 
 	marker := "\n...[truncated]...\n"
@@ -29,23 +43,31 @@ func TruncateHeadTail(s string, limit int) TruncatedOutput {
 		return TruncatedOutput{
 			Text:         text,
 			Truncated:    true,
-			OmittedBytes: len(s) - len(text),
+			OmittedBytes: total - len(text),
+			TotalBytes:   total,
+			ShownBytes:   len(text),
 		}
 	}
 
 	remaining := limit - markerLen
 	head := remaining / 2
 	tail := remaining - head
-	text := s[:head] + marker + s[len(s)-tail:]
+	text := s[:head] + marker + s[total-tail:]
 
 	return TruncatedOutput{
 		Text:         text,
 		Truncated:    true,
-		OmittedBytes: len(s) - head - tail,
+		OmittedBytes: total - head - tail,
+		TotalBytes:   total,
+		ShownBytes:   head + tail + markerLen,
 	}
 }
 
-func SanitizeStream(s string, limit int) TruncatedOutput {
-	clean := strings.TrimRight(StripANSI(s), "\r\n")
-	return TruncateHeadTail(clean, limit)
+func SanitizeStream(s string, opts SanitizeOpts) TruncatedOutput {
+	clean := StripANSI(s)
+	if opts.StripCRLF {
+		clean = StripCRLF(clean)
+	}
+	clean = strings.TrimRight(clean, "\n")
+	return TruncateHeadTail(clean, opts.Limit)
 }

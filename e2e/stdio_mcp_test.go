@@ -76,7 +76,7 @@ func TestToolDiscovery(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = struct{}{}
 	}
-	for _, expected := range []string{"run_command", "get_session", "kill_session"} {
+	for _, expected := range []string{"run_command", "get_session", "kill_session", "list_sessions"} {
 		if _, ok := names[expected]; !ok {
 			t.Fatalf("missing tool %q, got %#v", expected, names)
 		}
@@ -135,6 +135,22 @@ func TestRunCommandTimeout(t *testing.T) {
 	})
 	if payload["timed_out"].(bool) != true {
 		t.Fatalf("timed_out = %v", payload["timed_out"])
+	}
+}
+
+func TestListSessions(t *testing.T) {
+	session := connectServer(t)
+	tmp := t.TempDir()
+
+	callToolJSON(t, session, "run_command", map[string]any{
+		"command":    "cd " + tmp,
+		"session_id": "list-me",
+	})
+
+	payload := callToolJSON(t, session, "list_sessions", map[string]any{})
+	sessions, ok := payload["sessions"].([]any)
+	if !ok || len(sessions) == 0 {
+		t.Fatalf("sessions = %#v", payload["sessions"])
 	}
 }
 

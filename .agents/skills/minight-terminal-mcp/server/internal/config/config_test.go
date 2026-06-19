@@ -1,13 +1,14 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("MAX_TIMEOUT_SECONDS", "")
+	t.Setenv("DEFAULT_TIMEOUT_SECONDS", "")
+	t.Setenv("MINIGHT_BACKEND", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -21,6 +22,22 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.OutputLimit != 3000 {
 		t.Fatalf("OutputLimit = %d, want 3000", cfg.OutputLimit)
+	}
+	if !cfg.StripCRLF {
+		t.Fatal("StripCRLF should default true")
+	}
+}
+
+func TestLoadDefaultTimeoutFromEnv(t *testing.T) {
+	t.Setenv("DEFAULT_TIMEOUT_SECONDS", "90")
+	t.Setenv("MAX_TIMEOUT_SECONDS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DefaultTimeout != 90*time.Second {
+		t.Fatalf("DefaultTimeout = %v, want 90s", cfg.DefaultTimeout)
 	}
 }
 
@@ -47,7 +64,7 @@ func TestLoadInvalidMaxTimeout(t *testing.T) {
 
 func TestLoadShellPathFromEnv(t *testing.T) {
 	t.Setenv("MAX_TIMEOUT_SECONDS", "")
-	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("MINIGHT_SHELL", "/bin/zsh")
 
 	cfg, err := Load()
 	if err != nil {
@@ -58,17 +75,27 @@ func TestLoadShellPathFromEnv(t *testing.T) {
 	}
 }
 
-func TestLoadShellPathFallback(t *testing.T) {
-	t.Setenv("MAX_TIMEOUT_SECONDS", "")
-	if err := os.Unsetenv("SHELL"); err != nil {
-		t.Fatalf("Unsetenv(SHELL): %v", err)
-	}
+func TestLoadBackendFromEnv(t *testing.T) {
+	t.Setenv("MINIGHT_BACKEND", "posix")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.ShellPath != "/bin/sh" {
-		t.Fatalf("ShellPath = %q, want /bin/sh", cfg.ShellPath)
+	if cfg.Backend != "posix" {
+		t.Fatalf("Backend = %q, want posix", cfg.Backend)
+	}
+}
+
+func TestDefaultTimeoutCappedByMax(t *testing.T) {
+	t.Setenv("DEFAULT_TIMEOUT_SECONDS", "600")
+	t.Setenv("MAX_TIMEOUT_SECONDS", "120")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DefaultTimeout != 120*time.Second {
+		t.Fatalf("DefaultTimeout = %v, want capped 120s", cfg.DefaultTimeout)
 	}
 }

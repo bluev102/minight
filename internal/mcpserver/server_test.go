@@ -123,6 +123,21 @@ func TestKillSession(t *testing.T) {
 	}
 }
 
+func TestListSessionsTool(t *testing.T) {
+	session := connectTestServer(t)
+	tmp := t.TempDir()
+
+	callToolJSON(t, session, "run_command", map[string]any{
+		"command":    "cd " + tmp,
+		"session_id": "listed",
+	})
+	payload := callToolJSON(t, session, "list_sessions", map[string]any{})
+	sessions, ok := payload["sessions"].([]any)
+	if !ok || len(sessions) == 0 {
+		t.Fatalf("sessions = %#v", payload["sessions"])
+	}
+}
+
 func TestRunCommandRejectsEmptyCommand(t *testing.T) {
 	session := connectTestServer(t)
 	payload := callToolJSON(t, session, "run_command", map[string]any{

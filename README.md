@@ -51,7 +51,9 @@ Register it in Cursor MCP config (`~/.cursor/mcp.json`):
       "command": "/absolute/path/to/minight-terminal",
       "args": [],
       "env": {
-        "MAX_TIMEOUT_SECONDS": "300"
+        "DEFAULT_TIMEOUT_SECONDS": "60",
+        "MAX_TIMEOUT_SECONDS": "300",
+        "MINIGHT_BACKEND": "auto"
       }
     }
   }
@@ -59,6 +61,35 @@ Register it in Cursor MCP config (`~/.cursor/mcp.json`):
 ```
 
 You can also point Cursor at the built binary inside this repo after `go build`.
+
+## Windows Setup
+
+### Native Windows (recommended for repos on `E:\`, `C:\`, etc.)
+
+Build on Windows and register the binary directly:
+
+```json
+{
+  "mcpServers": {
+    "minight-terminal": {
+      "command": "C:\\path\\to\\minight-terminal.exe",
+      "env": {
+        "MINIGHT_BACKEND": "windows",
+        "DEFAULT_TIMEOUT_SECONDS": "60",
+        "MAX_TIMEOUT_SECONDS": "300"
+      }
+    }
+  }
+}
+```
+
+Native Windows backend uses PowerShell, avoids WSL `/mnt/<drive>` filesystem penalties, and accepts Windows paths directly.
+
+### WSL bridge (legacy)
+
+If you must run through WSL, use `/mnt/<drive>/...` paths (not `/e/...`). Enable path normalization (default on) or set `MINIGHT_NORMALIZE_WSL_PATHS=true`.
+
+Expect slower git/filesystem operations on drvfs mounts. Verbose responses include `environment_warnings` when cwd is on `/mnt/<drive>/`.
 
 ## Tools
 
@@ -74,9 +105,19 @@ Input:
   "session_id": "default",
   "timeout": 30,
   "cwd": "/home/user/project",
-  "verbose": false
+  "verbose": false,
+  "fail_on_any_error": false,
+  "pipefail": false,
+  "strip_crlf": true
 }
 ```
+
+- `session_id` defaults to `default`.
+- `timeout` defaults to `DEFAULT_TIMEOUT_SECONDS` (or 30s). Values above `MAX_TIMEOUT_SECONDS` are capped.
+- `return_code` is the shell exit code of the full command string.
+- `had_failure` is true when any command segment failed or exit code was non-zero.
+- Use `fail_on_any_error: true` (bash) to detect earlier failures in `;` chains while keeping shell-final `return_code`.
+- Use `pipefail: true` (bash) so pipeline failures propagate.
 
 Compact response:
 
@@ -87,24 +128,35 @@ Compact response:
   "return_code": 0,
   "timed_out": false,
   "current_cwd": "/home/user/project",
-  "truncated": false
+  "truncated": false,
+  "had_failure": false,
+  "cwd_persisted": true
 }
 ```
 
-With `verbose: true`, the response also includes `duration_ms`, `stdout_omitted_bytes`, `stderr_omitted_bytes`, `session_id`, and `env_changed_count`.
+With `verbose: true`, the response also includes `duration_ms`, `stdout_omitted_bytes`, `stderr_omitted_bytes`, `stdout_total_bytes`, `stderr_total_bytes`, `session_id`, `env_changed_count`, `environment_warnings`, and `suggested_timeout` on timeout.
 
 ### `get_session`
 
-Return the current working directory for a session.
+Return session metadata for a session.
 
 ```json
 {
   "session_id": "default",
-  "current_cwd": "/home/user"
+  "current_cwd": "/home/user",
+  "env_key_count": 42,
+  "last_command": "go test ./...",
+  "background_jobs": 0,
+  "last_return_code": 0,
+  "last_had_failure": false
 }
 ```
 
 Environment values are intentionally not returned to reduce token usage and avoid leaking secrets.
+
+### `list_sessions`
+
+List active sessions with safe metadata (no env values).
 
 ### `kill_session`
 
@@ -113,7 +165,17 @@ Reset a session back to its initial state.
 ```json
 {
   "session_id": "default",
-  "reset": true
+  "terminate_background_jobs": true
+}
+```
+
+Response:
+
+```json
+{
+  "session_id": "default",
+  "reset": true,
+  "background_jobs_killed": 1
 }
 ```
 
@@ -121,11 +183,13 @@ Reset a session back to its initial state.
 
 - Missing `session_id` uses `default`.
 - Unknown sessions are auto-created at the user's home directory.
-- Each command runs in a short-lived shell using `$SHELL -lc`.
+- Each command runs in a short-lived shell via the selected backend (`posix` or `windows`).
 - After each command, the server captures final `cwd` and environment via an internal trailer and updates the session, including after non-zero exits.
+- `current_cwd` always reflects the shell-reported cwd from the trailer; `cwd_persisted` confirms session storage matched.
 - On timeout, the process group is killed and session state is not updated.
-- Output is ANSI-stripped and truncated using head/tail retention when it exceeds the configured limit.
+- Output is ANSI-stripped, CRLF-normalized (by default), and truncated using head/tail retention when it exceeds the configured limit.
 - Dangerous commands are rejected before execution with a short JSON error.
+- Background jobs started with `&` are tracked when detectable; `kill_session` with `terminate_background_jobs: true` kills tracked PIDs.
 
 ## Security Model
 
@@ -137,7 +201,7 @@ The server rejects obviously dangerous commands such as `rm -rf /`, fork bombs, 
 
 - No persistent PTY or interactive terminal emulation.
 - No streaming output.
-- No background job management.
+- Background job tracking is best-effort for short-lived shells; jobs started outside trailer capture may not be tracked.
 - Environment persistence is based on post-command trailer capture, not a long-lived shell process.
 - Aliases and shell functions depend on shell startup files and may not match an interactive terminal exactly.
 
@@ -145,9 +209,15 @@ The server rejects obviously dangerous commands such as `rm -rf /`, fork bombs, 
 
 Environment variables:
 
-- `MAX_TIMEOUT_SECONDS`: maximum allowed timeout per command. Default server max is 300 seconds unless overridden.
-
-Shell selection uses `$SHELL`, falling back to `/bin/sh`.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEFAULT_TIMEOUT_SECONDS` | `30` | Default per-command timeout |
+| `MAX_TIMEOUT_SECONDS` | `300` | Maximum allowed timeout per command |
+| `MINIGHT_BACKEND` | `auto` | `auto`, `posix`, or `windows` |
+| `MINIGHT_SHELL` | `$SHELL` / `/bin/sh` | Shell binary override |
+| `MINIGHT_STRIP_CRLF` | `true` | Strip `\r` from output |
+| `MINIGHT_NORMALIZE_WSL_PATHS` | `true` | Convert `/e/...` to `/mnt/e/...` under WSL |
+| `MINIGHT_OUTPUT_LIMIT` | `3000` | Max stdout/stderr chars before truncation |
 
 ## Development
 
@@ -169,10 +239,16 @@ Build release binary:
 go build -o minight-terminal .
 ```
 
+Sync skill bundled server after root changes:
+
+```bash
+bash .agents/skills/minight-terminal-mcp/scripts/sync-server.sh
+bash .agents/skills/minight-terminal-mcp/scripts/sync-server.sh --check
+```
+
 ## Roadmap
 
 - Docker/sandbox execution mode
 - Persistent shell / PTY mode
 - Streaming output
-- `list_sessions`
 - Allowed cwd configuration
